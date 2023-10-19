@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_admob/firebase_admob.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_analytics/observer.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -14,11 +14,10 @@ import 'package:listennotes_api/models/podcast_simple.dart';
 import 'package:podcast_now/bloc/podcasts_bloc.dart';
 import 'package:podcast_now/repository/podcast_repository.dart';
 import 'package:podcast_now/repository/podcast_repository_interface.dart';
+import 'package:podcast_now/scrollable/scrollable_test.dart';
 import 'package:podcast_now/splash_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import 'ad_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +27,7 @@ void main() async {
   // Pass all uncaught errors from the framework to Crashlytics.
   FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+  MobileAds.instance.initialize();
 
   // Lock to portrait
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -39,19 +39,24 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  static FirebaseAnalytics analytics = FirebaseAnalytics();
-  static FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(analytics: analytics);
+  static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
+  static FirebaseAnalyticsObserver observer =
+      FirebaseAnalyticsObserver(analytics: analytics);
 
   final Map<String, Route<dynamic> Function(RouteSettings settings)> pages = {
     '/': (settings) {
-      analytics.setCurrentScreen(screenName: settings.name, screenClassOverride: '$SplashScreen');
-      return MaterialPageRoute(builder: (context) => SplashScreen(), settings: settings);
+      analytics.setCurrentScreen(
+          screenName: settings.name, screenClassOverride: '$SplashScreen');
+      return MaterialPageRoute(
+          builder: (context) => SplashScreen(), settings: settings);
     },
     RandomPodcastHome.routeName: (settings) {
-      analytics.setCurrentScreen(screenName: settings.name, screenClassOverride: '$RandomPodcastHome');
+      analytics.setCurrentScreen(
+          screenName: settings.name, screenClassOverride: '$RandomPodcastHome');
       return MaterialPageRoute(
         builder: (context) => Provider<PodcastBloc>(
-          create: (context) => PodcastBloc(Provider.of<IPodcastRepository>(context, listen: false)),
+          create: (context) => PodcastBloc(
+              Provider.of<IPodcastRepository>(context, listen: false)),
           dispose: (context, bloc) => bloc.dispose(),
           lazy: false,
           child: RandomPodcastHome(),
@@ -64,31 +69,27 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Podcast Now!',
-      theme: ThemeData.dark(),
-      onGenerateRoute: (settings) => pages[settings.name](settings),
-      navigatorObservers: [observer],
-      debugShowCheckedModeBanner: false,
+        title: 'Podcast Now!',
+        theme: ThemeData.dark(),
+        onGenerateRoute: (settings) => pages[settings.name]!(settings),
+        navigatorObservers: [observer],
+        debugShowCheckedModeBanner: false
     );
   }
 }
 
 class RandomPodcastHome extends StatefulWidget {
   static const routeName = '/home';
-  static const MobileAdTargetingInfo targetingInfo = MobileAdTargetingInfo(
-    contentUrl: "https://www.listennotes.com",
-    keywords: ['podcast'],
-    nonPersonalizedAds: true,
-  );
 
-  const RandomPodcastHome({Key key}) : super(key: key);
+  const RandomPodcastHome({Key? key}) : super(key: key);
 
   @override
   _RandomPodcastHomeState createState() => _RandomPodcastHomeState();
 }
 
-class _RandomPodcastHomeState extends State<RandomPodcastHome> with WidgetsBindingObserver {
-  InterstitialAd _interstitialAd;
+class _RandomPodcastHomeState extends State<RandomPodcastHome>
+    with WidgetsBindingObserver {
+  InterstitialAd? _interstitialAd;
 
   @override
   Widget build(BuildContext context) {
@@ -101,9 +102,9 @@ class _RandomPodcastHomeState extends State<RandomPodcastHome> with WidgetsBindi
               if (snapshot.hasData) {
                 if (snapshot.data == null) return NoMorePodcasts();
                 return PodcastDetail(
-                  podcast: snapshot.data,
+                  podcast: snapshot.data!,
                   onNewPodcastRequest: () async {
-                    if (_interstitialAd != null && await _interstitialAd.isLoaded()) _interstitialAd.show();
+                    if (_interstitialAd != null) _interstitialAd!.show();
 
                     bloc.newPodcast();
                   },
@@ -131,21 +132,26 @@ class _RandomPodcastHomeState extends State<RandomPodcastHome> with WidgetsBindi
   }
 
   Future _createInterstitialAdAsync() async {
-    final rc = await RemoteConfig.instance;
-    var adUnitId = rc.getString("interstitial_ad_unit_id");
+    final rc = FirebaseRemoteConfig.instance;
+    var adUnitId = kDebugMode ? 'ca-app-pub-3940256099942544/1033173712'
+        : rc.getString("interstitial_ad_unit_id");
 
-    _interstitialAd = InterstitialAd(
+    await InterstitialAd.load(
         adUnitId: adUnitId,
-        listener: (MobileAdEvent event) {
-          if (event == MobileAdEvent.closed) _interstitialAd.load();
-        });
-
-    _interstitialAd.load();
+        request: const AdRequest(
+          contentUrl: "https://www.listennotes.com",
+          keywords: ['podcast'],
+        ),
+        adLoadCallback: InterstitialAdLoadCallback(onAdLoaded: (ad) {
+          _interstitialAd = ad;
+        }, onAdFailedToLoad: (LoadAdError error) {
+          debugPrint("InterstitialAd failed to load: $error");
+        }));
   }
 
   @override
   void dispose() {
-    _interstitialAd.dispose();
+    _interstitialAd?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -165,9 +171,11 @@ class _RandomPodcastHomeState extends State<RandomPodcastHome> with WidgetsBindi
 
 class PodcastDetail extends StatelessWidget {
   final PodcastSimple podcast;
-  final Function onNewPodcastRequest;
+  final void Function() onNewPodcastRequest;
 
-  const PodcastDetail({Key key, @required this.podcast, this.onNewPodcastRequest}) : super(key: key);
+  const PodcastDetail(
+      {Key? key, required this.podcast, required this.onNewPodcastRequest})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +209,9 @@ class PodcastDetail extends StatelessWidget {
           Flexible(
             child: Container(
               margin: const EdgeInsets.only(top: 8),
-              decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(8)),
               child: SingleChildScrollView(
                 child: Html(
                   data: podcast.description,
@@ -210,9 +220,8 @@ class PodcastDetail extends StatelessWidget {
             ),
           ),
           podcast.listennotesUrl.isNotEmpty
-              ? RaisedButton(
+              ? ElevatedButton(
                   onPressed: () async => await launch(podcast.listennotesUrl),
-                  color: Colors.grey[900],
                   child: Text("Listen on ListenNotes"),
                 )
               : Container(),
@@ -249,7 +258,7 @@ class NoMorePodcasts extends StatelessWidget {
 class FourOFourWidget extends StatelessWidget {
   final String text;
 
-  const FourOFourWidget({Key key, @required this.text}) : super(key: key);
+  const FourOFourWidget({Key? key, required this.text}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

@@ -15,17 +15,17 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class PodcastRepository implements IPodcastRepository {
-  ListenNotesAPI listenNotesAPI;
-  Database cache;
+  late ListenNotesAPI listenNotesAPI;
+  late Database cache;
 
-  final List<Genre> genres = List();
-  final List<Podcast> podcasts = List();
+  final List<Genre> genres = [];
+  final List<Podcast> podcasts = [];
 
   PodcastRepository();
 
   Future init() async {
     // Firebase remote config
-    final remoteConfig = await RemoteConfig.instance;
+    final remoteConfig = FirebaseRemoteConfig.instance;
 
     // Initialize listenNotesAPI
     listenNotesAPI = ListenNotesAPI(apiKey: remoteConfig.getString("listennotes_api_key"));
@@ -45,7 +45,7 @@ class PodcastRepository implements IPodcastRepository {
       }),
     );
 
-    genres.addAll((await cache.query("Genres")).map((e) => Genre(e["id"], e["page"])));
+    genres.addAll((await cache.query("Genres")).map((e) => Genre(e["id"] as int,  e["page"] as int)));
 
     if (genres.isEmpty) {
       genres.addAll((await listenNotesAPI.getGenres()).map((e) => Genre(e.id, 1)));
@@ -56,7 +56,7 @@ class PodcastRepository implements IPodcastRepository {
     var podcastsQuery = await cache.rawQuery("SELECT id, json FROM Podcasts WHERE is_new = 1");
 
     if (podcastsQuery.isNotEmpty) {
-      podcasts.addAll(podcastsQuery.map((e) => Podcast(e["id"], e["genre_id"], e["json"], e["is_new"])));
+      podcasts.addAll(podcastsQuery.map((e) => Podcast(e["id"] as String, e["genre_id"] as int, e["json"] as String, e["is_new"] as bool)));
     }
   }
 

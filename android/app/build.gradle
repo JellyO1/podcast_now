@@ -32,7 +32,13 @@ if(keystorePropertiesFile.exists()) {
 }
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 33
+    namespace = 'com.tobedefined.podcast_now'
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
@@ -44,8 +50,8 @@ android {
 
     defaultConfig {
         applicationId "com.tobedefined.podcast_now"
-        minSdkVersion 16
-        targetSdkVersion 30
+        minSdkVersion 19
+        targetSdkVersion 33
         multiDexEnabled true
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

@@ -5,7 +5,7 @@ class Entity {
   final String name;
   EntityState state;
 
-  Entity(this.name, {EntityState state}) : state = state ?? EntityState.added;
+  Entity(this.name, {EntityState? state}) : state = state ?? EntityState.added;
 
 //  EntityChangeTracker _entityChangeTracker;
 //  _DetachedEntityChangeTracker _detachedEntityChangeTracker;
